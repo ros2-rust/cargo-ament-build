@@ -1,0 +1,19 @@
+[package]
+name = "cargo-ament-build"
+version = "0.1.0"
+authors = ["Nikolai Morin <nnmmgit@gmail.com>"]
+edition = "2021"
+license = "Apache-2.0"
+description = "Cargo plugin for use with colcon workspaces"
+repository = "https://github.com/ros2-rust/cargo-ament-build"
+readme = "README.md"
+categories = ["development-tools::cargo-plugins"]
+keywords = ["ros2", "colcon", "ament"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+cargo-manifest = "0.2"
+fs_extra = "1"
+pico-args = "0.4"
