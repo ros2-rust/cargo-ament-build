@@ -2,12 +2,13 @@
 
 use anyhow::{anyhow, Context, Result};
 
-use cargo_manifest::Manifest;
 use cargo_ament_build::*;
+use cargo_manifest::Manifest;
 
 fn main() {
     let exitcode = match fallible_main().context("Error in cargo-ament-build") {
-        Ok(()) => 0,
+        Ok(true) => 0,
+        Ok(false) => 1,
         Err(e) => {
             eprintln!("{:?}", e);
             1
@@ -17,7 +18,10 @@ fn main() {
     std::process::exit(exitcode);
 }
 
-fn fallible_main() -> Result<()> {
+/// Returns Ok when there was no error in this plugin itself (even though cargo
+/// build/check may have failed), and a boolean indicating the cargo build/check
+/// status.
+fn fallible_main() -> Result<bool> {
     let args = Args::parse()?;
     let mut manifest = Manifest::from_path(&args.manifest_path)?;
     manifest.complete_from_path(&args.manifest_path)?;
@@ -26,9 +30,9 @@ fn fallible_main() -> Result<()> {
     let is_pure_library = manifest.bin.as_ref().unwrap().is_empty();
     let verb = if is_pure_library { "check" } else { "build" };
     let exitcode = cargo(&args.forwarded_args, verb)?
-        .ok_or(anyhow!("'cargo {verb}' was terminated by signal."))?;
+        .ok_or(anyhow!("'cargo {}' was terminated by signal.", verb))?;
     if exitcode != 0 {
-        return Err(anyhow!("'cargo {verb}' failed."));
+        return Ok(false);
     }
 
     let package_name = &manifest
@@ -54,5 +58,5 @@ fn fallible_main() -> Result<()> {
         // Unwrap is safe since complete_from_path() has been called
         &manifest.bin.unwrap(),
     )?;
-    Ok(())
+    Ok(true)
 }
