@@ -155,20 +155,40 @@ pub fn install_binaries(
     profile: &str,
     binaries: &[Product],
 ) -> Result<()> {
+    let src_dir = build_base.as_ref().join(profile);
+    let dest_dir = install_base.as_ref().join("lib").join(package_name);
+    // Copy binaries
     for binary in binaries {
         let name = binary
             .name
             .as_ref()
             .ok_or(anyhow!("Binary without name found."))?;
-        let src_location = build_base.as_ref().join(profile).join(name);
-        let mut dest = install_base.as_ref().join("lib").join(package_name);
+        let src = src_dir.join(name);
+        let dest = dest_dir.join(name);
         // Create destination directory
-        DirBuilder::new().recursive(true).create(&dest)?;
-        dest.push(name);
-        std::fs::copy(&src_location, &dest).context(format!(
-            "Failed to copy binary from '{}'.",
-            src_location.display()
-        ))?;
+        DirBuilder::new().recursive(true).create(&dest_dir)?;
+        std::fs::copy(&src, &dest)
+            .context(format!("Failed to copy binary from '{}'.", src.display()))?;
+    }
+    // If there is a shared or static library, copy it too
+    // See https://doc.rust-lang.org/reference/linkage.html for an explanation of suffixes
+    let prefix_suffix_combinations = [
+        ("lib", "so"),
+        ("lib", "dylib"),
+        ("lib", "a"),
+        ("", "dll"),
+        ("", "lib"),
+    ];
+    for (prefix, suffix) in prefix_suffix_combinations {
+        let filename = String::from(prefix) + package_name + "." + suffix;
+        let src = src_dir.join(&filename);
+        let dest = dest_dir.join(filename);
+        if src.is_file() {
+            // Create destination directory
+            DirBuilder::new().recursive(true).create(&dest_dir)?;
+            std::fs::copy(&src, &dest)
+                .context(format!("Failed to copy library from '{}'.", src.display()))?;
+        }
     }
     Ok(())
 }
