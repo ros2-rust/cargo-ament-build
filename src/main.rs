@@ -29,12 +29,15 @@ fn fallible_main() -> Result<bool> {
     // Unwrap is safe since complete_from_path() has been called
     let is_pure_library = {
         let no_binaries = manifest.bin.as_ref().unwrap().is_empty();
-        let no_exported_libraries =
-            if let Some(crate_types) = manifest.lib.as_ref().unwrap().crate_type.as_ref() {
-                crate_types.as_slice() == &[String::from("rlib")]
-            } else {
-                true
-            };
+        let no_exported_libraries = if let Some(crate_types) = manifest
+            .lib
+            .as_ref()
+            .and_then(|lib| lib.crate_type.as_ref())
+        {
+            crate_types.as_slice() == &[String::from("rlib")]
+        } else {
+            true
+        };
         no_binaries && no_exported_libraries
     };
     let verb = if is_pure_library { "check" } else { "build" };
