@@ -1,7 +1,7 @@
 // Licensed under the Apache License, Version 2.0
 
-use anyhow::{anyhow, Context, Result};
-use cargo_manifest::Product;
+use anyhow::{anyhow, bail, Context, Result};
+use cargo_manifest::{Manifest, Product, Value};
 
 use std::ffi::OsString;
 use std::fs::{DirBuilder, File};
@@ -61,7 +61,7 @@ impl Args {
         } else {
             PathBuf::from("Cargo.toml")
                 .canonicalize()
-                .context("Package manifest does not exist.")?
+                .context("Package manifest does not exist")?
         };
 
         let res = Args {
@@ -86,7 +86,7 @@ pub fn cargo(args: &[OsString], verb: &str) -> Result<Option<i32>> {
     }
     let exit_status = cmd
         .status()
-        .context("Failed to spawn 'cargo build' subprocess.")?;
+        .context("Failed to spawn 'cargo build' subprocess")?;
     Ok(exit_status.code())
 }
 
@@ -105,45 +105,82 @@ pub fn create_package_marker(
         .create(&path)
         .with_context(|| {
             format!(
-                "Failed to create package marker directory '{}'.",
+                "Failed to create package marker directory '{}'",
                 path.display()
             )
         })?;
     path.push(package_name);
     File::create(&path)
-        .with_context(|| format!("Failed to create package marker '{}'.", path.display()))?;
+        .with_context(|| format!("Failed to create package marker '{}'", path.display()))?;
+    Ok(())
+}
+
+/// Copies files or directories.
+fn copy(src: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()> {
+    let src = src.as_ref();
+    let dest = dest_dir.as_ref().join(src.file_name().unwrap());
+    if src.is_dir() {
+        std::fs::create_dir_all(&dest)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                copy(entry.path(), &dest)?;
+            } else {
+                std::fs::copy(entry.path(), dest.join(entry.file_name()))?;
+            }
+        }
+    } else if src.is_file() {
+        std::fs::copy(&src, &dest).with_context(|| {
+            format!(
+                "Failed to copy '{}' to '{}'.",
+                src.display(),
+                dest.display()
+            )
+        })?;
+    } else {
+        bail!("File or dir '{}' does not exist", src.display())
+    }
     Ok(())
 }
 
 /// Copy the source code of the package to the install space
+///
+/// Specifically, `${install_base}/share/${package}/rust`.
 pub fn install_package(
     install_base: impl AsRef<Path>,
     package_path: impl AsRef<Path>,
+    manifest_path: impl AsRef<Path>,
     package_name: &str,
+    manifest: &Manifest,
 ) -> Result<()> {
-    let mut dest = install_base.as_ref().to_owned();
-    dest.push("share");
-    dest.push(package_name);
-    dest.push("rust");
-    fs_extra::dir::remove(&dest)?;
-    DirBuilder::new().recursive(true).create(&dest)?;
-    let mut opt = fs_extra::dir::CopyOptions::new();
-    opt.overwrite = true;
-    for dir_entry in std::fs::read_dir(package_path)? {
-        let dir_entry = dir_entry?;
-        let src = dir_entry.path();
-        let filename = dir_entry.file_name();
-        // There might be a target directory after a manual build with cargo
-        if filename == "target" {
-            continue;
-        }
-        if src.is_dir() {
-            fs_extra::dir::copy(&src, &dest, &opt).context("Failed to install package.")?;
-        } else {
-            let dest_file = dest.join(filename);
-            std::fs::copy(&src, &dest_file).context("Failed to install package.")?;
-        }
+    // Install source code
+    // This is special-cased (and not simply added to the list of things to install below)
+    let mut dest_dir = install_base.as_ref().to_owned();
+    dest_dir.push("share");
+    dest_dir.push(package_name);
+    dest_dir.push("rust");
+    if dest_dir.is_dir() {
+        std::fs::remove_dir_all(&dest_dir)?;
     }
+    DirBuilder::new().recursive(true).create(&dest_dir)?;
+    // unwrap is ok since it has been validated in main
+    let package = manifest.package.as_ref().unwrap();
+    // The entry for the build script can be empty (in which case build.rs is implicitly used if it
+    // exists), or a path, or false (in which case build.rs is not implicitly used).
+    let build = match &package.build {
+        Some(Value::Boolean(false)) => None,
+        Some(Value::String(path)) => Some(path.as_str()),
+        Some(_) => bail!("Value of 'build' is not a string or boolean"),
+        None => None,
+    };
+    if let Some(filename) = build {
+        let src = package_path.as_ref().join(filename);
+        copy(src, &dest_dir)?;
+    }
+
+    copy(package_path.as_ref().join("src"), &dest_dir)?;
+    copy(manifest_path.as_ref(), &dest_dir)?;
+    copy(manifest_path.as_ref().with_extension("lock"), &dest_dir)?;
     Ok(())
 }
 
@@ -157,18 +194,21 @@ pub fn install_binaries(
 ) -> Result<()> {
     let src_dir = build_base.as_ref().join(profile);
     let dest_dir = install_base.as_ref().join("lib").join(package_name);
+    if dest_dir.is_dir() {
+        std::fs::remove_dir_all(&dest_dir)?;
+    }
     // Copy binaries
     for binary in binaries {
         let name = binary
             .name
             .as_ref()
-            .ok_or(anyhow!("Binary without name found."))?;
+            .ok_or(anyhow!("Binary without name found"))?;
         let src = src_dir.join(name);
         let dest = dest_dir.join(name);
         // Create destination directory
         DirBuilder::new().recursive(true).create(&dest_dir)?;
         std::fs::copy(&src, &dest)
-            .context(format!("Failed to copy binary from '{}'.", src.display()))?;
+            .context(format!("Failed to copy binary from '{}'", src.display()))?;
     }
     // If there is a shared or static library, copy it too
     // See https://doc.rust-lang.org/reference/linkage.html for an explanation of suffixes
@@ -187,8 +227,53 @@ pub fn install_binaries(
             // Create destination directory
             DirBuilder::new().recursive(true).create(&dest_dir)?;
             std::fs::copy(&src, &dest)
-                .context(format!("Failed to copy library from '{}'.", src.display()))?;
+                .context(format!("Failed to copy library from '{}'", src.display()))?;
         }
+    }
+    Ok(())
+}
+
+/// Copy selected files/directories to the share dir.
+pub fn install_to_share(
+    install_base: impl AsRef<Path>,
+    package_path: impl AsRef<Path>,
+    package_name: &str,
+    metadata: Option<&Value>,
+) -> Result<()> {
+    let dest = install_base.as_ref().join("share").join(package_name);
+    copy(package_path.as_ref().join("package.xml"), &dest)
+        .context("Failed to install package.xml")?;
+    // Unpack the metadata entry
+    let metadata_table = match metadata {
+        Some(Value::Table(tab)) => tab,
+        _ => return Ok(()),
+    };
+    let ros_table = match metadata_table.get("ros") {
+        Some(Value::Table(tab)) => tab,
+        _ => return Ok(()),
+    };
+    let install_array = match ros_table.get("install_to_share") {
+        Some(Value::Array(arr)) => arr,
+        Some(_) => bail!("The [package.metadata.ros.install_to_share] entry is not an array"),
+        _ => return Ok(()),
+    };
+    let install_to_share = install_array
+        .iter()
+        .map(|entry| match entry {
+            Value::String(dir) => Ok(dir.clone()),
+            _ => Err(anyhow!(
+                "The elements of the [package.metadata.ros.install_to_share] array must be strings"
+            )),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for rel_path in install_to_share {
+        let src = package_path.as_ref().join(&rel_path);
+        copy(&src, &dest).with_context(|| {
+            format!(
+                "Could not process [package.metadata.ros.install_to_share] entry '{}'",
+                rel_path
+            )
+        })?;
     }
     Ok(())
 }

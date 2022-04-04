@@ -8,3 +8,12 @@ What does this plugin do?
 - It builds or checks the package, depending on whether it contains any binaries
 - It copies the source code and binaries to appropriate locations in the install base
 - It places marker files in the ament index
+
+It is possible to specify additional files or directories to be installed in the `metadata` section of `Cargo.toml` like this:
+```
+[package.metadata.ros]
+install_to_share = ["launch", "config"]
+```
+These paths are relative to the directory containing the `Cargo.toml` file and will be copied to the appropriate location in `share`.
+
+Target types other than libraries and binaries (i.e. benches, tests) are not yet installed.

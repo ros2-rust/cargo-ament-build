@@ -1,6 +1,6 @@
 [package]
 name = "cargo-ament-build"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Nikolai Morin <nnmmgit@gmail.com>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -15,5 +15,4 @@ keywords = ["ros2", "colcon", "ament"]
 [dependencies]
 anyhow = "1"
 cargo-manifest = "0.2"
-fs_extra = "1"
 pico-args = "0.4"
