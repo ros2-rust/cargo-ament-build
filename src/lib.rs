@@ -23,7 +23,13 @@ pub struct Args {
     pub manifest_path: PathBuf,
 }
 
-impl Args {
+/// Wrapper around [`Args`] that can also indicate the --help flag.
+pub enum ArgsOrHelp {
+    Args(Args),
+    Help,
+}
+
+impl ArgsOrHelp {
     /// This binary not only reads arguments before the --, but also selected arguments after
     /// the --, so that it knows where the resulting binaries will be located.
     pub fn parse() -> Result<Self> {
@@ -43,6 +49,9 @@ impl Args {
 
         // Now pass all the arguments (without `--`) through to `pico_args`.
         let mut args = pico_args::Arguments::from_vec(args);
+        if args.contains("--help") {
+            return Ok(ArgsOrHelp::Help);
+        }
         let profile = if args.contains("--release") {
             String::from("release")
         } else if let Ok(p) = args.value_from_str("--profile") {
@@ -72,7 +81,14 @@ impl Args {
             manifest_path,
         };
 
-        Ok(res)
+        Ok(ArgsOrHelp::Args(res))
+    }
+
+    pub fn print_help() {
+        println!("cargo-ament-build");
+        println!("Wrapper around cargo-build that installs compilation results and extra files to an ament/ROS 2 install space.\n");
+        println!("USAGE:");
+        println!("    cargo ament-build --install-base <INSTALL_DIR> -- <CARGO-BUILD-OPTIONS>");
     }
 }
 

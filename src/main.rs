@@ -22,7 +22,13 @@ fn main() {
 /// build/check may have failed), and a boolean indicating the cargo build/check
 /// status.
 fn fallible_main() -> Result<bool> {
-    let args = Args::parse()?;
+    let args = match ArgsOrHelp::parse()? {
+        ArgsOrHelp::Args(args) => args,
+        ArgsOrHelp::Help => {
+            ArgsOrHelp::print_help();
+            return Ok(true);
+        }
+    };
     let mut manifest = Manifest::from_path(&args.manifest_path)?;
     manifest.complete_from_path(&args.manifest_path)?;
 
