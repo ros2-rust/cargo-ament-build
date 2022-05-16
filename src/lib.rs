@@ -197,6 +197,11 @@ pub fn install_package(
     copy(package_path.as_ref().join("src"), &dest_dir)?;
     copy(manifest_path.as_ref(), &dest_dir)?;
     copy(manifest_path.as_ref().with_extension("lock"), &dest_dir)?;
+    // unwrap is ok since we pushed to the path before
+    copy(
+        package_path.as_ref().join("package.xml"),
+        dest_dir.parent().unwrap(),
+    )?;
     Ok(())
 }
 
@@ -250,46 +255,47 @@ pub fn install_binaries(
 }
 
 /// Copy selected files/directories to the share dir.
-pub fn install_to_share(
+pub fn install_files_from_metadata(
     install_base: impl AsRef<Path>,
     package_path: impl AsRef<Path>,
     package_name: &str,
     metadata: Option<&Value>,
 ) -> Result<()> {
-    let dest = install_base.as_ref().join("share").join(package_name);
-    copy(package_path.as_ref().join("package.xml"), &dest)
-        .context("Failed to install package.xml")?;
     // Unpack the metadata entry
     let metadata_table = match metadata {
         Some(Value::Table(tab)) => tab,
         _ => return Ok(()),
     };
-    let ros_table = match metadata_table.get("ros") {
+    let metadata_ros_table = match metadata_table.get("ros") {
         Some(Value::Table(tab)) => tab,
         _ => return Ok(()),
     };
-    let install_array = match ros_table.get("install_to_share") {
-        Some(Value::Array(arr)) => arr,
-        Some(_) => bail!("The [package.metadata.ros.install_to_share] entry is not an array"),
-        _ => return Ok(()),
-    };
-    let install_to_share = install_array
-        .iter()
-        .map(|entry| match entry {
-            Value::String(dir) => Ok(dir.clone()),
-            _ => Err(anyhow!(
-                "The elements of the [package.metadata.ros.install_to_share] array must be strings"
-            )),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    for rel_path in install_to_share {
-        let src = package_path.as_ref().join(&rel_path);
-        copy(&src, &dest).with_context(|| {
-            format!(
-                "Could not process [package.metadata.ros.install_to_share] entry '{}'",
-                rel_path
-            )
-        })?;
+    for subdir in ["share", "include", "lib"] {
+        let dest = install_base.as_ref().join(subdir).join(package_name);
+        DirBuilder::new().recursive(true).create(&dest)?;
+        let key = format!("install_to_{subdir}");
+        let install_array = match metadata_ros_table.get(&key) {
+            Some(Value::Array(arr)) => arr,
+            Some(_) => bail!("The [package.metadata.ros.{key}] entry is not an array"),
+            _ => return Ok(()),
+        };
+        let install_entries = install_array
+            .iter()
+            .map(|entry| match entry {
+                Value::String(dir) => Ok(dir.clone()),
+                _ => {
+                    bail!("The elements of the [package.metadata.ros.{key}] array must be strings")
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for rel_path in install_entries {
+            let src = package_path.as_ref().join(&rel_path);
+            copy(&src, &dest).with_context(|| {
+                format!(
+                    "Could not process [package.metadata.ros.{key}] entry '{rel_path}'",
+                )
+            })?;
+        }
     }
     Ok(())
 }

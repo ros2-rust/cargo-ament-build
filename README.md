@@ -16,4 +16,6 @@ install_to_share = ["launch", "config"]
 ```
 These paths are relative to the directory containing the `Cargo.toml` file and will be copied to the appropriate location in `share`.
 
+The same mechanism applies with `install_to_include` and `install_to_lib`.
+
 Target types other than libraries and binaries (i.e. benches, tests) are not yet installed.
