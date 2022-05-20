@@ -81,7 +81,7 @@ fn fallible_main() -> Result<bool> {
         // Unwrap is safe since complete_from_path() has been called
         &manifest.bin.unwrap(),
     )?;
-    install_to_share(
+    install_files_from_metadata(
         &args.install_base,
         package_path,
         package_name,
