@@ -196,7 +196,19 @@ pub fn install_package(
 
     copy(package_path.as_ref().join("src"), &dest_dir)?;
     copy(manifest_path.as_ref(), &dest_dir)?;
-    copy(manifest_path.as_ref().with_extension("lock"), &dest_dir)?;
+
+    // Copy the workspace's lock file
+    let mut is_workspace = false;
+    if let Some(parent) = manifest_path.as_ref().parent() {
+        if copy(parent.join("Cargo.lock"), &dest_dir).is_err() {
+            is_workspace = true;
+        }
+    }
+
+    if !is_workspace {
+        copy(manifest_path.as_ref().with_extension("lock"), &dest_dir)?;
+    }
+
     // unwrap is ok since we pushed to the path before
     copy(
         package_path.as_ref().join("package.xml"),
@@ -291,9 +303,7 @@ pub fn install_files_from_metadata(
         for rel_path in install_entries {
             let src = package_path.as_ref().join(&rel_path);
             copy(&src, &dest).with_context(|| {
-                format!(
-                    "Could not process [package.metadata.ros.{key}] entry '{rel_path}'",
-                )
+                format!("Could not process [package.metadata.ros.{key}] entry '{rel_path}'",)
             })?;
         }
     }
