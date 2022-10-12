@@ -29,6 +29,7 @@ fn fallible_main() -> Result<bool> {
             return Ok(true);
         }
     };
+
     let mut manifest = Manifest::from_path(&args.manifest_path)?;
     manifest.complete_from_path(&args.manifest_path)?;
 
@@ -47,20 +48,27 @@ fn fallible_main() -> Result<bool> {
         no_binaries && no_exported_libraries
     };
     let verb = if is_pure_library { "check" } else { "build" };
+
+    let package = manifest
+        .package
+        .as_ref()
+        .ok_or(anyhow!("Cargo manifest has no package section."))?;
+
+    // Generate Rust's packages.
+    generate_msg(package.metadata.as_ref())?;
+
     let exitcode = cargo(&args.forwarded_args, verb)?
         .ok_or_else(|| anyhow!("'cargo {}' was terminated by signal.", verb))?;
     if exitcode != 0 {
         return Ok(false);
     }
-    let package = manifest
-        .package
-        .as_ref()
-        .ok_or(anyhow!("Cargo manifest has no package section."))?;
+
     let package_name = &package.name;
     let package_path = args
         .manifest_path
         .parent()
         .ok_or(anyhow!("Manifest path must have a parent."))?;
+
     // Putting marker file creation after the actual build command means that
     // we create less garbage if the build command failed.
     create_package_marker(&args.install_base, "packages", package_name)?;
@@ -76,6 +84,7 @@ fn fallible_main() -> Result<bool> {
     install_binaries(
         &args.install_base,
         &args.build_base,
+        &args.manifest_path,
         package_name,
         &args.profile,
         // Unwrap is safe since complete_from_path() has been called

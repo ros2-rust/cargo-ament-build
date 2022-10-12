@@ -19,3 +19,19 @@ These paths are relative to the directory containing the `Cargo.toml` file and w
 The same mechanism applies with `install_to_include` and `install_to_lib`.
 
 Target types other than libraries and binaries (i.e. benches, tests) are not yet installed.
+
+Dependencies of messages can be specified as follows.
+
+```toml
+[package.metadata.ros]
+msg = ["std_msgs"]
+msg_dir = "/tmp/safe_drive_msg"
+safe_drive_path = "path_to/safe_drive"
+```
+
+```toml
+[package.metadata.ros]
+msg = ["std_msgs"]
+msg_dir = "/tmp/safe_drive_msg"
+safe_drive_version = "0.1"
+```

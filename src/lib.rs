@@ -2,6 +2,7 @@
 
 use anyhow::{anyhow, bail, Context, Result};
 use cargo_manifest::{Manifest, Product, Value};
+use safe_drive_msg::SafeDrive;
 
 use std::ffi::OsString;
 use std::fs::{DirBuilder, File};
@@ -131,6 +132,52 @@ pub fn create_package_marker(
     Ok(())
 }
 
+pub fn generate_msg(metadata: Option<&Value>) -> Result<()> {
+    let (libs, msg_dir, safe_drive) = if let Some(metadata_table) = metadata {
+        if let Some(ros_table) = metadata_table.get("ros") {
+            let libs = match ros_table.get("msg") {
+                Some(Value::Array(arr)) => arr,
+                Some(_) => bail!("The [package.metadata.ros.msg] entry is not an array"),
+                _ => return Ok(()),
+            };
+
+            let msg_dir = match ros_table.get("msg_dir") {
+                Some(Value::String(dir)) => Path::new(dir),
+                Some(_) => bail!("The [package.metadata.ros.msg_dir] entry is not an astring"),
+                _ => bail!("[package.metadata.ros.msg_dir] is required"),
+            };
+
+            let safe_drive = match ros_table.get("safe_drive_path") {
+                Some(Value::String(safe_drive_path)) => SafeDrive::Path(safe_drive_path),
+                Some(_) => {
+                    bail!("The [package.metadata.ros.safe_drive_path] entry is not an string")
+                }
+                _ => match ros_table.get("safe_drive_version") {
+                    Some(Value::String(safe_drive_path)) => SafeDrive::Version(safe_drive_path),
+                    Some(_) => bail!(
+                        "The [package.metadata.ros.safe_drive_version] entry is not an string"
+                    ),
+                    _ => bail!("[package.metadata.ros.safe_drive_path] or [package.metadata.ros.safe_drive_version] is required"),
+                },
+            };
+
+            (libs, msg_dir, safe_drive)
+        } else {
+            return Ok(());
+        }
+    } else {
+        return Ok(());
+    };
+
+    let libs: Vec<_> = libs.iter().filter_map(|v| v.as_str()).collect();
+
+    if let Err(e) = safe_drive_msg::depends(msg_dir, &libs, safe_drive) {
+        Err(anyhow!("failed to generate Rust's projects: {e}"))
+    } else {
+        Ok(())
+    }
+}
+
 /// Copies files or directories.
 fn copy(src: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()> {
     let src = src.as_ref();
@@ -199,8 +246,8 @@ pub fn install_package(
 
     // Copy the workspace's lock file
     let mut is_workspace = false;
-    if let Some(parent) = manifest_path.as_ref().parent() {
-        if copy(parent.join("Cargo.lock"), &dest_dir).is_err() {
+    if let Some(parent) = manifest_path.as_ref().parent().map_or(None, |p| p.parent()) {
+        if copy(parent.join("Cargo.lock"), &dest_dir).is_ok() {
             is_workspace = true;
         }
     }
@@ -221,6 +268,7 @@ pub fn install_package(
 pub fn install_binaries(
     install_base: impl AsRef<Path>,
     build_base: impl AsRef<Path>,
+    manifest_path: impl AsRef<Path>,
     package_name: &str,
     profile: &str,
     binaries: &[Product],
@@ -240,8 +288,18 @@ pub fn install_binaries(
         let dest = dest_dir.join(name);
         // Create destination directory
         DirBuilder::new().recursive(true).create(&dest_dir)?;
-        std::fs::copy(&src, &dest)
-            .context(format!("Failed to copy binary from '{}'", src.display()))?;
+
+        let mut is_workspace = false;
+        if let Some(parent) = manifest_path.as_ref().parent().map_or(None, |p| p.parent()) {
+            if copy(parent.join("target").join(profile).join(name), &dest_dir).is_ok() {
+                is_workspace = true;
+            }
+        }
+
+        if !is_workspace {
+            std::fs::copy(&src, &dest)
+                .context(format!("Failed to copy binary from '{}'", src.display()))?;
+        }
     }
     // If there is a shared or static library, copy it too
     // See https://doc.rust-lang.org/reference/linkage.html for an explanation of suffixes
