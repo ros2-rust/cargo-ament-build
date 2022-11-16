@@ -169,6 +169,8 @@ pub fn install_package(
     package_name: &str,
     manifest: &Manifest,
 ) -> Result<()> {
+    let manifest_path = manifest_path.as_ref();
+
     // Install source code
     // This is special-cased (and not simply added to the list of things to install below)
     let mut dest_dir = install_base.as_ref().to_owned();
@@ -195,13 +197,22 @@ pub fn install_package(
     }
 
     copy(package_path.as_ref().join("src"), &dest_dir)?;
-    copy(manifest_path.as_ref(), &dest_dir)?;
-    copy(manifest_path.as_ref().with_extension("lock"), &dest_dir)?;
+    copy(manifest_path, &dest_dir)?;
+
     // unwrap is ok since we pushed to the path before
     copy(
         package_path.as_ref().join("package.xml"),
         dest_dir.parent().unwrap(),
     )?;
+
+    // The lockfile may not exist in the case that the package is in a
+    // Cargo workspace. The lockfile is alongside the top-level
+    // virtual Cargo.toml.
+    let lockfile_path = manifest_path.with_extension("lock");
+    if lockfile_path.is_file() {
+        copy(&lockfile_path, &dest_dir)?;
+    }
+
     Ok(())
 }
 
