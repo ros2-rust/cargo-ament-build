@@ -33,5 +33,5 @@ safe_drive_path = "path_to/safe_drive"
 [package.metadata.ros]
 msg = ["std_msgs"]
 msg_dir = "/tmp/safe_drive_msg"
-safe_drive_version = "0.1"
+safe_drive_version = "0.2"
 ```
