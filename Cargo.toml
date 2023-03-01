@@ -1,7 +1,7 @@
 [package]
 name = "cargo-ament-build"
-version = "0.1.7"
-authors = ["Nikolai Morin <nnmmgit@gmail.com>"]
+version = "0.2.0"
+authors = ["Nikolai Morin <nnmmgit@gmail.com>", "Yuuki Takano <yuuki.takano@tier4.jp>"]
 edition = "2021"
 license = "Apache-2.0"
 description = "Cargo plugin for use with colcon workspaces"
@@ -14,6 +14,6 @@ keywords = ["ros2", "colcon", "ament"]
 
 [dependencies]
 anyhow = "1"
-cargo-manifest = "0.4"
+cargo-manifest = "0.7"
 pico-args = "0.5"
-safe_drive_msg = "0.1"
+safe_drive_msg = "0.2"
