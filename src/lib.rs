@@ -1,7 +1,7 @@
 // Licensed under the Apache License, Version 2.0
 
 use anyhow::{anyhow, bail, Context, Result};
-use cargo_manifest::{Manifest, Product, Value};
+use cargo_manifest::{Manifest, Product, Value, StringOrBool};
 use safe_drive_msg::SafeDrive;
 
 use std::ffi::OsString;
@@ -231,8 +231,8 @@ pub fn install_package(
     // The entry for the build script can be empty (in which case build.rs is implicitly used if it
     // exists), or a path, or false (in which case build.rs is not implicitly used).
     let build = match &package.build {
-        Some(Value::Boolean(false)) => None,
-        Some(Value::String(path)) => Some(path.as_str()),
+        Some(StringOrBool::Bool(false)) => None,
+        Some(StringOrBool::String(path)) => Some(path.as_str()),
         Some(_) => bail!("Value of 'build' is not a string or boolean"),
         None => None,
     };
@@ -280,18 +280,21 @@ pub fn install_binaries(
     }
     // Copy binaries
     for binary in binaries {
-        let name = binary
+        let mut name = binary
             .name
-            .as_ref()
+            .clone()
             .ok_or(anyhow!("Binary without name found"))?;
-        let src = src_dir.join(name);
-        let dest = dest_dir.join(name);
+        if cfg!(target_os = "windows") {
+            name.push_str(".exe");
+        }
+        let src = src_dir.join(&name);
+        let dest = dest_dir.join(&name);
         // Create destination directory
         DirBuilder::new().recursive(true).create(&dest_dir)?;
 
         let mut is_workspace = false;
         if let Some(parent) = manifest_path.as_ref().parent().map_or(None, |p| p.parent()) {
-            if copy(parent.join("target").join(profile).join(name), &dest_dir).is_ok() {
+            if copy(parent.join("target").join(profile).join(&name), &dest_dir).is_ok() {
                 is_workspace = true;
             }
         }

@@ -1,6 +1,6 @@
 [package]
 name = "cargo-ament-build"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Nikolai Morin <nnmmgit@gmail.com>", "Yuuki Takano <yuuki.takano@tier4.jp>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -14,6 +14,7 @@ keywords = ["ros2", "colcon", "ament"]
 
 [dependencies]
 anyhow = "1"
-cargo-manifest = "0.7"
+cargo-manifest = "0.11"
 pico-args = "0.5"
+# safe_drive_msg = { path = "../safe_drive_msg" }
 safe_drive_msg = "0.2"
