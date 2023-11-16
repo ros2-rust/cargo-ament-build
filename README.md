@@ -1,6 +1,6 @@
 # cargo-ament-build
 ## getting started.
-At the moment, this tool only works with existing freight packages. Here is an example you can try yourself:
+At the moment, this tool only works with existing cargo packages. Here is an example you can try yourself:
 ```
 cargo new rclrs_example
 ```
