@@ -237,6 +237,10 @@ pub fn install_binaries(
             .ok_or(anyhow!("Binary without name found"))?;
         let src = src_dir.join(name);
         let dest = dest_dir.join(name);
+        #[cfg(target_os = "windows")]
+        let dest = dest.with_extension("exe");
+        #[cfg(target_os = "windows")]
+        let src = src.with_extension("exe");
         // Create destination directory
         DirBuilder::new().recursive(true).create(&dest_dir)?;
         std::fs::copy(&src, &dest)
