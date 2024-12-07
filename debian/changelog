@@ -1,0 +1,5 @@
+cargo-ament-build (0.1.9-100) focal jammy noble bookworm trixie; urgency=low
+
+  * source package automatically created by stdeb 0.10.1
+
+ -- None <None>  Sun, 08 Dec 2024 17:51:16 +0100
