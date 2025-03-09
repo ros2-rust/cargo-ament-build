@@ -14,7 +14,7 @@ keywords = ["ros2", "colcon", "ament"]
 
 [dependencies]
 anyhow = "1"
-cargo-manifest = "0.2"
+cargo-manifest = "0.17"
 pico-args = "0.4"
 
 # The profile that 'cargo dist' will build with

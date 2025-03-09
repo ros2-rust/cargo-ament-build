@@ -34,7 +34,7 @@ fn fallible_main() -> Result<bool> {
 
     // Unwrap is safe since complete_from_path() has been called
     let is_pure_library = {
-        let no_binaries = manifest.bin.as_ref().unwrap().is_empty();
+        let no_binaries = manifest.bin.is_empty();
         let no_exported_libraries = if let Some(crate_types) = manifest
             .lib
             .as_ref()
@@ -79,7 +79,7 @@ fn fallible_main() -> Result<bool> {
         package_name,
         &args.profile,
         // Unwrap is safe since complete_from_path() has been called
-        &manifest.bin.unwrap(),
+        &manifest.bin,
     )?;
     install_files_from_metadata(
         &args.install_base,

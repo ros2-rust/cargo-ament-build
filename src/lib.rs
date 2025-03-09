@@ -1,7 +1,7 @@
 // Licensed under the Apache License, Version 2.0
 
 use anyhow::{anyhow, bail, Context, Result};
-use cargo_manifest::{Manifest, Product, Value};
+use cargo_manifest::{Manifest, Product, StringOrBool, Value};
 
 use std::ffi::OsString;
 use std::fs::{DirBuilder, File};
@@ -186,8 +186,8 @@ pub fn install_package(
     // The entry for the build script can be empty (in which case build.rs is implicitly used if it
     // exists), or a path, or false (in which case build.rs is not implicitly used).
     let build = match &package.build {
-        Some(Value::Boolean(false)) => None,
-        Some(Value::String(path)) => Some(path.as_str()),
+        Some(StringOrBool::Bool(false)) => None,
+        Some(StringOrBool::String(path)) => Some(path.as_str()),
         Some(_) => bail!("Value of 'build' is not a string or boolean"),
         None => None,
     };
@@ -306,9 +306,7 @@ pub fn install_files_from_metadata(
         for rel_path in install_entries {
             let src = package_path.as_ref().join(&rel_path);
             copy(&src, &dest).with_context(|| {
-                format!(
-                    "Could not process [package.metadata.ros.{key}] entry '{rel_path}'",
-                )
+                format!("Could not process [package.metadata.ros.{key}] entry '{rel_path}'",)
             })?;
         }
     }
