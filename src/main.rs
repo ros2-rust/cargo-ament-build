@@ -1,6 +1,6 @@
 // Licensed under the Apache License, Version 2.0
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 use cargo_ament_build::*;
 use cargo_manifest::Manifest;
@@ -10,7 +10,7 @@ fn main() {
         Ok(true) => 0,
         Ok(false) => 1,
         Err(e) => {
-            eprintln!("{:?}", e);
+            eprintln!("{e:?}");
             1
         }
     };
