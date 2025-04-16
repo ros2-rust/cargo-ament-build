@@ -1,6 +1,6 @@
 // Licensed under the Apache License, Version 2.0
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use cargo_manifest::{Manifest, Product, StringOrBool, Value};
 
 use std::ffi::OsString;
@@ -86,7 +86,9 @@ impl ArgsOrHelp {
 
     pub fn print_help() {
         println!("cargo-ament-build");
-        println!("Wrapper around cargo-build that installs compilation results and extra files to an ament/ROS 2 install space.\n");
+        println!(
+            "Wrapper around cargo-build that installs compilation results and extra files to an ament/ROS 2 install space.\n"
+        );
         println!("USAGE:");
         println!("    cargo ament-build --install-base <INSTALL_DIR> -- <CARGO-BUILD-OPTIONS>");
     }
@@ -146,7 +148,7 @@ fn copy(src: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()> {
             }
         }
     } else if src.is_file() {
-        std::fs::copy(&src, &dest).with_context(|| {
+        std::fs::copy(src, &dest).with_context(|| {
             format!(
                 "Failed to copy '{}' to '{}'.",
                 src.display(),
