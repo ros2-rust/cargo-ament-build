@@ -13,9 +13,9 @@ keywords = ["ros2", "colcon", "ament"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1"
-cargo-manifest = "0.17"
-pico-args = "0.4"
+anyhow = "1.0.98"
+cargo-manifest = "0.19.1"
+pico-args = "0.5.0"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
