@@ -19,6 +19,8 @@ pub struct Args {
     pub forwarded_args: Vec<OsString>,
     /// "debug", "release" etc.
     pub profile: String,
+    /// The target architecture. None for native builds.
+    pub arch: Option<String>,
     /// The absolute path to the Cargo.toml file. Currently the --manifest-path option is not implemented.
     pub manifest_path: PathBuf,
 }
@@ -60,6 +62,10 @@ impl ArgsOrHelp {
             String::from("debug")
         };
 
+        let arch = args
+            .opt_value_from_str("--target")?
+            .or_else(|| std::env::var("CARGO_BUILD_TARGET").ok());
+
         let build_base = args
             .opt_value_from_str("--target-dir")?
             .unwrap_or_else(|| "target".into());
@@ -78,6 +84,7 @@ impl ArgsOrHelp {
             build_base,
             forwarded_args,
             profile,
+            arch,
             manifest_path,
         };
 
@@ -222,9 +229,15 @@ pub fn install_binaries(
     build_base: impl AsRef<Path>,
     package_name: &str,
     profile: &str,
+    arch: Option<&str>,
     binaries: &[Product],
 ) -> Result<()> {
-    let src_dir = build_base.as_ref().join(profile);
+    let src_dir = if let Some(arch) = arch {
+        build_base.as_ref().join(arch).join(profile)
+    } else {
+        build_base.as_ref().join(profile)
+    };
+
     let dest_dir = install_base.as_ref().join("lib").join(package_name);
     if dest_dir.is_dir() {
         std::fs::remove_dir_all(&dest_dir)?;
