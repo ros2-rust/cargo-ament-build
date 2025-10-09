@@ -3,6 +3,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use cargo_manifest::{Manifest, Product, StringOrBool, Value};
 
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::{DirBuilder, File};
 use std::path::Path;
@@ -23,6 +24,8 @@ pub struct Args {
     pub arch: Option<String>,
     /// The absolute path to the Cargo.toml file. Currently the --manifest-path option is not implemented.
     pub manifest_path: PathBuf,
+    /// Features that were active when compiling
+    pub features: HashSet<String>,
 }
 
 /// Wrapper around [`Args`] that can also indicate the --help flag.
@@ -79,6 +82,14 @@ impl ArgsOrHelp {
                 .context("Package manifest does not exist")?
         };
 
+        let features = match args.values_from_str("--features") {
+            Ok(features) => features,
+            Err(pico_args::Error::MissingArgument) => Default::default(),
+            Err(err) => return Err(err.into()),
+        }
+        .into_iter()
+        .collect();
+
         let res = Args {
             install_base,
             build_base,
@@ -86,6 +97,7 @@ impl ArgsOrHelp {
             profile,
             arch,
             manifest_path,
+            features,
         };
 
         Ok(ArgsOrHelp::Args(res))
@@ -230,6 +242,7 @@ pub fn install_binaries(
     package_name: &str,
     profile: &str,
     arch: Option<&str>,
+    features: &HashSet<String>,
     binaries: &[Product],
 ) -> Result<()> {
     let src_dir = if let Some(arch) = arch {
@@ -244,6 +257,18 @@ pub fn install_binaries(
     }
     // Copy binaries
     for binary in binaries {
+        let missing_feature = binary
+            .required_features
+            .iter()
+            .find(|feature| !features.contains(*feature))
+            .is_some();
+        if missing_feature {
+            // The build directory will not contain this binary because one of
+            // its required features is missing. We should skip our attempt to
+            // install it.
+            continue;
+        }
+
         let name = binary
             .name
             .as_ref()
