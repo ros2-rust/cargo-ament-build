@@ -260,8 +260,7 @@ pub fn install_binaries(
         let missing_feature = binary
             .required_features
             .iter()
-            .find(|feature| !features.contains(*feature))
-            .is_some();
+            .any(|feature| !features.contains(feature));
         if missing_feature {
             // The build directory will not contain this binary because one of
             // its required features is missing. We should skip our attempt to
