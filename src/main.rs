@@ -79,6 +79,7 @@ fn fallible_main() -> Result<bool> {
         package_name,
         &args.profile,
         args.arch.as_deref(),
+        &args.features,
         // Unwrap is safe since complete_from_path() has been called
         &manifest.bin,
     )?;
