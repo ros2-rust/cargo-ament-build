@@ -165,7 +165,7 @@ fn copy(src: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()> {
             }
         }
     } else if src.is_file() {
-        std::fs::copy(&src, &dest).with_context(|| {
+        std::fs::copy(src, &dest).with_context(|| {
             format!(
                 "Failed to copy '{}' to '{}'.",
                 src.display(),
