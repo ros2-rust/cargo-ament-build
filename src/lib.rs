@@ -158,7 +158,7 @@ pub fn create_package_marker(
     Ok(())
 }
 
-/// Copies files or directories.
+/// Copies files or directories recursively.
 fn copy(src: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()> {
     let src = src.as_ref();
     let dest = dest_dir.as_ref().join(src.file_name().unwrap());
@@ -361,6 +361,8 @@ pub fn install_files_from_metadata(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
+    use std::io::Write;
     use tempfile::tempdir;
 
     #[test]
@@ -375,6 +377,25 @@ mod tests {
 
         assert!(marker_path.exists());
         assert!(marker_path.is_file());
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_recursive() -> Result<()> {
+        let tmp = tempdir()?;
+        let src_dir = tmp.path().join("src_folder");
+        let dest_dir = tmp.path().join("dest_folder");
+
+        std::fs::create_dir_all(src_dir.join("sub"))?;
+        File::create(src_dir.join("file.txt"))?.write_all(b"hello")?;
+        File::create(src_dir.join("sub/inner.txt"))?.write_all(b"world")?;
+
+        std::fs::create_dir_all(&dest_dir)?;
+
+        copy(&src_dir, &dest_dir)?;
+
+        assert!(dest_dir.join("src_folder/file.txt").exists());
+        assert!(dest_dir.join("src_folder/sub/inner.txt").exists());
         Ok(())
     }
 }
