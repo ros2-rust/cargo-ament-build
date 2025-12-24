@@ -361,6 +361,7 @@ pub fn install_files_from_metadata(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::fs::File;
     use std::io::Write;
     use tempfile::tempdir;
@@ -526,6 +527,34 @@ mod tests {
         assert!(dest_dir.join("my_rust_lib.lib").exists());
         assert!(dest_dir.join("libmy_rust_lib.dylib").exists());
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_install_files_from_metadata() -> Result<()> {
+        let tmp = tempdir()?;
+        let package_path = tmp.path().join("pkg");
+        let install_base = tmp.path().join("install");
+
+        std::fs::create_dir_all(package_path.join("launch"))?;
+        File::create(package_path.join("launch/robot.py"))?;
+
+        /* Create serialized metadata akin to:
+        ```toml
+        [package.metadata.ros]
+        install_to_share = ["launch"]
+        ```
+        */
+        let mut metadata_table_entries: HashMap<String, Value> = HashMap::new();
+        metadata_table_entries.insert(
+            String::from("ros"),
+            Value::from(HashMap::from([("install_to_share", vec!["launch"])])),
+        );
+        let metadata_table = cargo_manifest::Value::from(metadata_table_entries);
+
+        install_files_from_metadata(&install_base, &package_path, "pkg", Some(&metadata_table))?;
+
+        assert!(install_base.join("share/pkg/launch/robot.py").exists());
         Ok(())
     }
 }
