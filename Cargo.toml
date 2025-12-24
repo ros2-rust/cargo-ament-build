@@ -17,6 +17,9 @@ anyhow = "1"
 cargo-manifest = "0.17"
 pico-args = "0.4"
 
+[dev-dependencies]
+tempfile = { version = "3" }
+
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
