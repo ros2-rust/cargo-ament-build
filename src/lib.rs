@@ -484,4 +484,48 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_install_binaries_lib_variants() -> Result<()> {
+        let tmp = tempdir()?;
+        let build_base = tmp.path().join("target");
+        let install_base = tmp.path().join("install");
+        let package_name = "my_rust_lib";
+        let profile = "release";
+
+        let src_dir = build_base.join(profile);
+        std::fs::create_dir_all(&src_dir)?;
+
+        let so_path = src_dir.join("libmy_rust_lib.so");
+        let a_path = src_dir.join("libmy_rust_lib.a");
+        let dll_path = src_dir.join("my_rust_lib.dll");
+        let lib_path = src_dir.join("my_rust_lib.lib");
+        let dylib_path = src_dir.join("libmy_rust_lib.dylib");
+
+        File::create(&so_path)?;
+        File::create(&a_path)?;
+        File::create(&dll_path)?;
+        File::create(&lib_path)?;
+        File::create(&dylib_path)?;
+
+        install_binaries(
+            &install_base,
+            &build_base,
+            package_name,
+            profile,
+            None,
+            &HashSet::new(),
+            &[],
+        )?;
+
+        let dest_dir = install_base.join("lib").join(package_name);
+
+        assert!(dest_dir.join("libmy_rust_lib.so").exists());
+        assert!(dest_dir.join("libmy_rust_lib.a").exists());
+        assert!(dest_dir.join("my_rust_lib.dll").exists());
+        assert!(dest_dir.join("my_rust_lib.lib").exists());
+        assert!(dest_dir.join("libmy_rust_lib.dylib").exists());
+
+        Ok(())
+    }
 }
