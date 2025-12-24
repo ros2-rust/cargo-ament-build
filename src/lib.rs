@@ -444,4 +444,44 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_install_binaries_with_arch() -> Result<()> {
+        let tmp = tempdir()?;
+        let build_base = tmp.path().join("target");
+        let install_base = tmp.path().join("install");
+        let package_name = "arch_test";
+        let profile = "debug";
+        let arch = "x86_64-unknown-linux-gnu";
+
+        let src_dir_x86 = build_base.join(arch).join(profile);
+        let src_dir_aarch = build_base.join("aarch64-unknown-linux-gnu").join(profile);
+        std::fs::create_dir_all(&src_dir_x86)?;
+        std::fs::create_dir_all(&src_dir_aarch)?;
+
+        std::fs::write(src_dir_x86.join("libarch_test.so"), "x86")?;
+        std::fs::write(src_dir_aarch.join("libarch_test.so"), "aarch")?;
+
+        install_binaries(
+            &install_base,
+            &build_base,
+            package_name,
+            profile,
+            Some(arch),
+            &HashSet::new(),
+            &[],
+        )?;
+
+        let dest_file = install_base
+            .join("lib")
+            .join(package_name)
+            .join("libarch_test.so");
+
+        assert!(dest_file.exists());
+
+        let installed_content = std::fs::read_to_string(dest_file)?;
+        assert_eq!(installed_content, "x86");
+
+        Ok(())
+    }
 }
