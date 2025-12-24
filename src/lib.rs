@@ -125,7 +125,15 @@ pub fn cargo(args: &[OsString], verb: &str) -> Result<Option<i32>> {
     Ok(exit_status.code())
 }
 
-/// This is comparable to ament_index_register_resource() in CMake
+/// Create an ament resource index marker file for a package
+///
+/// This function registers a package to ament by creating an empty marker file at
+/// `share/ament_index/resource_index` with the package name as filename.  
+///
+/// The presence of this file is used by ament and colcon to discover installed packages and other resources.
+/// For more information:
+/// - Design doc: https://github.com/ament/ament_cmake/blob/2366f15479e37d552d4e225f09ccef1c6ccc8c4e/ament_cmake_core/doc/resource_index.md
+/// - Reference implementation of CMake: https://github.com/ament/ament_cmake/blob/2366f15479e37d552d4e225f09ccef1c6ccc8c4e/ament_cmake_core/cmake/index/ament_index_register_resource.cmake
 pub fn create_package_marker(
     install_base: impl AsRef<Path>,
     marker_dir: &str,
@@ -348,4 +356,25 @@ pub fn install_files_from_metadata(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_create_package_marker() -> Result<()> {
+        let tmp = tempdir()?;
+        let install_base = tmp.path();
+
+        create_package_marker(install_base, "packages", "test_package")?;
+
+        let marker_path =
+            install_base.join("share/ament_index/resource_index/packages/test_package");
+
+        assert!(marker_path.exists());
+        assert!(marker_path.is_file());
+        Ok(())
+    }
 }
