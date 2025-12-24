@@ -398,4 +398,50 @@ mod tests {
         assert!(dest_dir.join("src_folder/sub/inner.txt").exists());
         Ok(())
     }
+
+    #[test]
+    fn test_install_binaries_feature_filtering() -> Result<()> {
+        let tmp = tempdir()?;
+        let build_base = tmp.path().join("target");
+        let install_base = tmp.path().join("install");
+        let profile = "debug";
+
+        // Create dummy binaries in build dir. One of them requires a feature that wasn't used during
+        // compilation and should therefore not be installed
+        let bin_dir = build_base.join(profile);
+        std::fs::create_dir_all(&bin_dir)?;
+        File::create(bin_dir.join("my_bin"))?;
+        File::create(bin_dir.join("skipped_bin"))?;
+
+        let mut features = HashSet::new();
+        features.insert("required_feat".to_string());
+
+        let binaries = vec![
+            Product {
+                name: Some("my_bin".to_string()),
+                required_features: vec!["required_feat".to_string()],
+                ..Default::default()
+            },
+            Product {
+                name: Some("skipped_bin".to_string()),
+                required_features: vec!["missing_feat".to_string()],
+                ..Default::default()
+            },
+        ];
+
+        install_binaries(
+            &install_base,
+            &build_base,
+            "my_package",
+            profile,
+            None,
+            &features,
+            &binaries,
+        )?;
+
+        assert!(install_base.join("lib/my_package/my_bin").exists());
+        assert!(!install_base.join("lib/my_package/skipped_bin").exists());
+
+        Ok(())
+    }
 }
