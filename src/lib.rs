@@ -125,7 +125,15 @@ pub fn cargo(args: &[OsString], verb: &str) -> Result<Option<i32>> {
     Ok(exit_status.code())
 }
 
-/// This is comparable to ament_index_register_resource() in CMake
+/// Create an ament resource index marker file for a package
+///
+/// This function registers a package to ament by creating an empty marker file at
+/// `share/ament_index/resource_index` with the package name as filename.  
+///
+/// The presence of this file is used by ament and colcon to discover installed packages and other resources.
+/// For more information:
+/// - Design doc: https://github.com/ament/ament_cmake/blob/2366f15479e37d552d4e225f09ccef1c6ccc8c4e/ament_cmake_core/doc/resource_index.md
+/// - Reference implementation of CMake: https://github.com/ament/ament_cmake/blob/2366f15479e37d552d4e225f09ccef1c6ccc8c4e/ament_cmake_core/cmake/index/ament_index_register_resource.cmake
 pub fn create_package_marker(
     install_base: impl AsRef<Path>,
     marker_dir: &str,
@@ -150,7 +158,7 @@ pub fn create_package_marker(
     Ok(())
 }
 
-/// Copies files or directories.
+/// Copies files or directories recursively.
 fn copy(src: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()> {
     let src = src.as_ref();
     let dest = dest_dir.as_ref().join(src.file_name().unwrap());
@@ -348,4 +356,205 @@ pub fn install_files_from_metadata(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_create_package_marker() -> Result<()> {
+        let tmp = tempdir()?;
+        let install_base = tmp.path();
+
+        create_package_marker(install_base, "packages", "test_package")?;
+
+        let marker_path =
+            install_base.join("share/ament_index/resource_index/packages/test_package");
+
+        assert!(marker_path.exists());
+        assert!(marker_path.is_file());
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_recursive() -> Result<()> {
+        let tmp = tempdir()?;
+        let src_dir = tmp.path().join("src_folder");
+        let dest_dir = tmp.path().join("dest_folder");
+
+        std::fs::create_dir_all(src_dir.join("sub"))?;
+        File::create(src_dir.join("file.txt"))?.write_all(b"hello")?;
+        File::create(src_dir.join("sub/inner.txt"))?.write_all(b"world")?;
+
+        std::fs::create_dir_all(&dest_dir)?;
+
+        copy(&src_dir, &dest_dir)?;
+
+        assert!(dest_dir.join("src_folder/file.txt").exists());
+        assert!(dest_dir.join("src_folder/sub/inner.txt").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn test_install_binaries_feature_filtering() -> Result<()> {
+        let tmp = tempdir()?;
+        let build_base = tmp.path().join("target");
+        let install_base = tmp.path().join("install");
+        let profile = "debug";
+
+        // Create dummy binaries in build dir. One of them requires a feature that wasn't used during
+        // compilation and should therefore not be installed
+        let bin_dir = build_base.join(profile);
+        std::fs::create_dir_all(&bin_dir)?;
+        File::create(bin_dir.join("my_bin"))?;
+        File::create(bin_dir.join("skipped_bin"))?;
+
+        let mut features = HashSet::new();
+        features.insert("required_feat".to_string());
+
+        let binaries = vec![
+            Product {
+                name: Some("my_bin".to_string()),
+                required_features: vec!["required_feat".to_string()],
+                ..Default::default()
+            },
+            Product {
+                name: Some("skipped_bin".to_string()),
+                required_features: vec!["missing_feat".to_string()],
+                ..Default::default()
+            },
+        ];
+
+        install_binaries(
+            &install_base,
+            &build_base,
+            "my_package",
+            profile,
+            None,
+            &features,
+            &binaries,
+        )?;
+
+        assert!(install_base.join("lib/my_package/my_bin").exists());
+        assert!(!install_base.join("lib/my_package/skipped_bin").exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_install_binaries_with_arch() -> Result<()> {
+        let tmp = tempdir()?;
+        let build_base = tmp.path().join("target");
+        let install_base = tmp.path().join("install");
+        let package_name = "arch_test";
+        let profile = "debug";
+        let arch = "x86_64-unknown-linux-gnu";
+
+        let src_dir_x86 = build_base.join(arch).join(profile);
+        let src_dir_aarch = build_base.join("aarch64-unknown-linux-gnu").join(profile);
+        std::fs::create_dir_all(&src_dir_x86)?;
+        std::fs::create_dir_all(&src_dir_aarch)?;
+
+        std::fs::write(src_dir_x86.join("libarch_test.so"), "x86")?;
+        std::fs::write(src_dir_aarch.join("libarch_test.so"), "aarch")?;
+
+        install_binaries(
+            &install_base,
+            &build_base,
+            package_name,
+            profile,
+            Some(arch),
+            &HashSet::new(),
+            &[],
+        )?;
+
+        let dest_file = install_base
+            .join("lib")
+            .join(package_name)
+            .join("libarch_test.so");
+
+        assert!(dest_file.exists());
+
+        let installed_content = std::fs::read_to_string(dest_file)?;
+        assert_eq!(installed_content, "x86");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_install_binaries_lib_variants() -> Result<()> {
+        let tmp = tempdir()?;
+        let build_base = tmp.path().join("target");
+        let install_base = tmp.path().join("install");
+        let package_name = "my_rust_lib";
+        let profile = "release";
+
+        let src_dir = build_base.join(profile);
+        std::fs::create_dir_all(&src_dir)?;
+
+        let so_path = src_dir.join("libmy_rust_lib.so");
+        let a_path = src_dir.join("libmy_rust_lib.a");
+        let dll_path = src_dir.join("my_rust_lib.dll");
+        let lib_path = src_dir.join("my_rust_lib.lib");
+        let dylib_path = src_dir.join("libmy_rust_lib.dylib");
+
+        File::create(&so_path)?;
+        File::create(&a_path)?;
+        File::create(&dll_path)?;
+        File::create(&lib_path)?;
+        File::create(&dylib_path)?;
+
+        install_binaries(
+            &install_base,
+            &build_base,
+            package_name,
+            profile,
+            None,
+            &HashSet::new(),
+            &[],
+        )?;
+
+        let dest_dir = install_base.join("lib").join(package_name);
+
+        assert!(dest_dir.join("libmy_rust_lib.so").exists());
+        assert!(dest_dir.join("libmy_rust_lib.a").exists());
+        assert!(dest_dir.join("my_rust_lib.dll").exists());
+        assert!(dest_dir.join("my_rust_lib.lib").exists());
+        assert!(dest_dir.join("libmy_rust_lib.dylib").exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_install_files_from_metadata() -> Result<()> {
+        let tmp = tempdir()?;
+        let package_path = tmp.path().join("pkg");
+        let install_base = tmp.path().join("install");
+
+        std::fs::create_dir_all(package_path.join("launch"))?;
+        File::create(package_path.join("launch/robot.py"))?;
+
+        /* Create serialized metadata akin to:
+        ```toml
+        [package.metadata.ros]
+        install_to_share = ["launch"]
+        ```
+        */
+        let mut metadata_table_entries: HashMap<String, Value> = HashMap::new();
+        metadata_table_entries.insert(
+            String::from("ros"),
+            Value::from(HashMap::from([("install_to_share", vec!["launch"])])),
+        );
+        let metadata_table = cargo_manifest::Value::from(metadata_table_entries);
+
+        install_files_from_metadata(&install_base, &package_path, "pkg", Some(&metadata_table))?;
+
+        assert!(install_base.join("share/pkg/launch/robot.py").exists());
+        Ok(())
+    }
 }
