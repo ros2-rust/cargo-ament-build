@@ -1,0 +1,106 @@
+name: Build Debian Package
+
+on:
+  push:
+    branches: ["main", "jrivero/add-stdeb"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build-and-test-debian-package:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - distro: noble
+            arch: amd64
+          - distro: noble
+            arch: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy contrib/debian to debian
+        run: cp -r contrib/debian debian
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Debian package in Docker
+        run: |
+          PLATFORM="${{ matrix.arch == 'arm64' && 'linux/arm64' || 'linux/amd64' }}"
+
+          cat > Dockerfile.build <<'EOF'
+          FROM ubuntu:${{ matrix.distro }}
+
+          ENV DEBIAN_FRONTEND=noninteractive
+
+          RUN apt-get update && apt-get install -y \
+              build-essential \
+              debhelper \
+              dh-python \
+              python3-all-dev \
+              python3-setuptools \
+              python3-setuptools-rust \
+              cargo \
+              rustc \
+              dpkg-dev \
+              && rm -rf /var/lib/apt/lists/*
+
+          WORKDIR /build
+          COPY . .
+
+          RUN dpkg-buildpackage -us -uc -b
+
+          EOF
+
+          docker build --platform="$PLATFORM" -f Dockerfile.build -t debian-builder:${{ matrix.distro }}-${{ matrix.arch }} .
+
+          # Extract the built packages from root directory where dpkg-buildpackage places them
+          docker create --name temp-container debian-builder:${{ matrix.distro }}-${{ matrix.arch }}
+          mkdir -p deb-output
+          docker cp temp-container:/. deb-output/
+          mv deb-output/*.deb . 2>/dev/null || true
+          rm -rf deb-output
+          docker rm temp-container
+
+      - name: List built packages
+        run: ls -lh *.deb
+
+      - name: Upload Debian packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-packages-${{ matrix.distro }}-${{ matrix.arch }}
+          path: "*.deb"
+
+      - name: Test package installation
+        run: |
+          PLATFORM="${{ matrix.arch == 'arm64' && 'linux/arm64' || 'linux/amd64' }}"
+
+          cat > Dockerfile.test <<'EOF'
+          FROM ubuntu:${{ matrix.distro }}
+
+          ENV DEBIAN_FRONTEND=noninteractive
+
+          RUN apt-get update && apt-get install -y \
+              python3 \
+              && rm -rf /var/lib/apt/lists/*
+
+          COPY *.deb /tmp/
+
+          RUN apt-get update && \
+              apt-get install -y /tmp/*.deb || \
+              (apt-get install -f -y && dpkg -i /tmp/*.deb)
+
+          RUN which cargo-ament-build && cargo-ament-build --help
+
+          EOF
+
+          docker build --platform="$PLATFORM" -f Dockerfile.test -t package-tester:${{ matrix.distro }}-${{ matrix.arch }} .
