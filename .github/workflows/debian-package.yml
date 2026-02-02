@@ -2,10 +2,7 @@ name: Build Debian Package
 
 on:
   push:
-    branches: ["main", "jrivero/add-stdeb"]
-  pull_request:
     branches: ["main"]
-  workflow_dispatch:
 
 jobs:
   build-and-test-debian-package:
