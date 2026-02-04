@@ -97,10 +97,12 @@ jobs:
               python3-all-dev \
               python3-setuptools \
               python3-setuptools-rust \
-              cargo \
-              rustc \
+              cargo-1.85 \
+              rustc-1.85 \
               dpkg-dev \
-              && rm -rf /var/lib/apt/lists/*
+              && rm -rf /var/lib/apt/lists/* \
+              && ln -sf /usr/bin/cargo-1.85 /usr/bin/cargo \
+              && ln -sf /usr/bin/rustc-1.85 /usr/bin/rustc
 
           WORKDIR /build
           COPY . .
