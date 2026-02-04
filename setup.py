@@ -40,7 +40,7 @@ long_description = description
 setup(
     version=version,
     cmdclass={"bdist_wheel": bdist_wheel},
-    rust_extensions=[RustBin("cargo-ament-build", args=cargo_args, cargo_manifest_args=["--offline"])],
+    rust_extensions=[RustBin("cargo-ament-build", args=cargo_args)],
     zip_safe=False,
     description=description,
     long_description=long_description,
