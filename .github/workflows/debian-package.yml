@@ -2,7 +2,7 @@ name: Build Debian Package
 
 on:
   push:
-    branches: ["main", "jrivero/add-stdeb"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
   workflow_dispatch:
@@ -50,11 +50,11 @@ jobs:
               name = maintainer
               email = "unknown@example.com"
 
-          print(f"PACKAGE_NAME={pkg['name']}")
-          print(f"VERSION={pkg['version']}")
-          print(f"DEBFULLNAME={name}")
-          print(f"DEBEMAIL={email}")
-          print(f"DISTRIBUTIONS={deb['distributions']}")
+          print(f'PACKAGE_NAME="{pkg["name"]}"')
+          print(f'VERSION="{pkg["version"]}"')
+          print(f'DEBFULLNAME="{name}"')
+          print(f'DEBEMAIL="{email}"')
+          print(f'DISTRIBUTIONS="{deb["distributions"]}"')
           PYEOF
 
           source /tmp/cargo_metadata.env
