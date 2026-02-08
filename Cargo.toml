@@ -28,10 +28,10 @@ lto = "thin"
 # Debian package metadata
 [package.metadata.deb]
 maintainer = "Esteve Fernandez <esteve@apache.org>"
-distributions = "focal jammy noble bookworm trixie"
+distributions = "jammy noble"
 
 # Config for 'dist'
-[workspace.metadata.dist]
+[workspace.metadata.dist]f
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.30.3"
 # CI backends to support
