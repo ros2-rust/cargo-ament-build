@@ -65,17 +65,17 @@ fn fallible_main() -> Result<bool> {
     // we create less garbage if the build command failed.
     create_package_marker(&args.install_base, "packages", package_name)?;
 
-    // If this package should be re-exported by rclrs, we do not want `colcon-ros-cargo` to
+    // If this package should be included in ros-env, we do not want `colcon-ros-cargo` to
     // find the package as it should not be patched.
-    let reexport_rclrs = package
+    let include_ros_env = package
         .metadata
         .as_ref()
-        .and_then(|m| m.get("rclrs"))
-        .and_then(|r| r.get("reexport"))
-        .and_then(|v| v.as_bool())
+        .and_then(|metadata| metadata.get("ros-env"))
+        .and_then(|ros_env| ros_env.get("include"))
+        .and_then(|include| include.as_bool())
         .unwrap_or(false);
 
-    if !reexport_rclrs {
+    if !include_ros_env {
         // This marker is used by colcon-ros-cargo when looking for dependencies
         create_package_marker(&args.install_base, "rust_packages", package_name)?;
     }
