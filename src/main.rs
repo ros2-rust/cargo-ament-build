@@ -64,8 +64,22 @@ fn fallible_main() -> Result<bool> {
     // Putting marker file creation after the actual build command means that
     // we create less garbage if the build command failed.
     create_package_marker(&args.install_base, "packages", package_name)?;
-    // This marker is used by colcon-ros-cargo when looking for dependencies
-    create_package_marker(&args.install_base, "rust_packages", package_name)?;
+
+    // If this package should be included in ros-env, we do not want `colcon-ros-cargo` to
+    // find the package as it should not be patched.
+    let include_ros_env = package
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("ros-env"))
+        .and_then(|ros_env| ros_env.get("include"))
+        .and_then(|include| include.as_bool())
+        .unwrap_or(false);
+
+    if !include_ros_env {
+        // This marker is used by colcon-ros-cargo when looking for dependencies
+        create_package_marker(&args.install_base, "rust_packages", package_name)?;
+    }
+
     install_package(
         &args.install_base,
         package_path,
