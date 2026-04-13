@@ -1,0 +1,155 @@
+name: Build Debian Package
+
+on:
+  push:
+    tags:
+      - '**[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+
+jobs:
+  build-and-test-debian-package:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - distro: noble
+            arch: amd64
+          - distro: noble
+            arch: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy contrib/debian to debian
+        run: cp -r contrib/debian debian
+
+      - name: Install devscripts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y devscripts
+
+      - name: Generate Debian changelog
+        run: |
+          # Extract metadata from Cargo.toml using Python's tomllib
+          python3 << 'PYEOF' > /tmp/cargo_metadata.env
+          import tomllib
+          import re
+          with open('Cargo.toml', 'rb') as f:
+              data = tomllib.load(f)
+          pkg = data['package']
+          deb = pkg['metadata']['deb']
+
+          # Parse maintainer "Name <email>" format
+          maintainer = deb['maintainer']
+          match = re.match(r'^(.+?)\s*<(.+)>$', maintainer)
+          if match:
+              name, email = match.groups()
+          else:
+              name = maintainer
+              email = "unknown@example.com"
+
+          print(f'PACKAGE_NAME="{pkg["name"]}"')
+          print(f'VERSION="{pkg["version"]}"')
+          print(f'DEBFULLNAME="{name}"')
+          print(f'DEBEMAIL="{email}"')
+          print(f'DISTRIBUTIONS="{deb["distributions"]}"')
+          PYEOF
+
+          source /tmp/cargo_metadata.env
+          export DEBEMAIL
+          export DEBFULLNAME
+
+          dch --create \
+              --package "$PACKAGE_NAME" \
+              --newversion "${VERSION}-1" \
+              --distribution "$DISTRIBUTIONS" \
+              --urgency low \
+              --force-distribution \
+              --check-dirname-level 0 \
+              "Release version ${VERSION}"
+
+          echo "Generated changelog:"
+          cat debian/changelog
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Debian package in Docker
+        run: |
+          PLATFORM="${{ matrix.arch == 'arm64' && 'linux/arm64' || 'linux/amd64' }}"
+
+          cat > Dockerfile.build <<'EOF'
+          FROM ubuntu:${{ matrix.distro }}
+
+          ENV DEBIAN_FRONTEND=noninteractive
+
+          RUN apt-get update && apt-get install -y \
+              build-essential \
+              debhelper \
+              dh-python \
+              python3-all-dev \
+              python3-setuptools \
+              python3-setuptools-rust \
+              cargo-1.85 \
+              rustc-1.85 \
+              dpkg-dev \
+              && rm -rf /var/lib/apt/lists/* \
+              && ln -sf /usr/bin/cargo-1.85 /usr/bin/cargo \
+              && ln -sf /usr/bin/rustc-1.85 /usr/bin/rustc
+
+          WORKDIR /build
+          COPY . .
+
+          RUN dpkg-buildpackage -us -uc -b
+
+          EOF
+
+          docker build --platform="$PLATFORM" -f Dockerfile.build -t debian-builder:${{ matrix.distro }}-${{ matrix.arch }} .
+
+          # Extract the built packages from root directory where dpkg-buildpackage places them
+          docker create --name temp-container debian-builder:${{ matrix.distro }}-${{ matrix.arch }}
+          mkdir -p deb-output
+          docker cp temp-container:/. deb-output/
+          mv deb-output/*.deb . 2>/dev/null || true
+          rm -rf deb-output
+          docker rm temp-container
+
+      - name: List built packages
+        run: ls -lh *.deb
+
+      - name: Upload Debian packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-packages-${{ matrix.distro }}-${{ matrix.arch }}
+          path: "*.deb"
+
+      - name: Test package installation
+        run: |
+          PLATFORM="${{ matrix.arch == 'arm64' && 'linux/arm64' || 'linux/amd64' }}"
+
+          cat > Dockerfile.test <<'EOF'
+          FROM ubuntu:${{ matrix.distro }}
+
+          ENV DEBIAN_FRONTEND=noninteractive
+
+          RUN apt-get update && apt-get install -y \
+              python3 \
+              && rm -rf /var/lib/apt/lists/*
+
+          COPY *.deb /tmp/
+
+          RUN apt-get update && \
+              apt-get install -y /tmp/*.deb || \
+              (apt-get install -f -y && dpkg -i /tmp/*.deb)
+
+          RUN which cargo-ament-build && cargo-ament-build --help
+
+          EOF
+
+          docker build --platform="$PLATFORM" -f Dockerfile.test -t package-tester:${{ matrix.distro }}-${{ matrix.arch }} .
